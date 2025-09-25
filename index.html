@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Weighbridge Slip Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+
+  <!-- Main Container -->
+  <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-4xl mx-auto flex flex-col md:flex-row gap-8">
+
+    <!-- Form Section -->
+    <div class="w-full md:w-1/2">
+      <h1 class="text-3xl font-bold mb-6 text-gray-800">Weighbridge Slip</h1>
+      <form id="slipForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Header Line 1</label>
+          <input id="headerLine1" value="LAKSHMI NARAYANA WEIGH BRIDGE" class="w-full p-2 border rounded-md" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Header Line 2</label>
+          <input id="headerLine2" value="G.N.T.ROAD, DUBACHERLA" class="w-full p-2 border rounded-md" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Header Line 3</label>
+          <input id="headerLine3" value="WEST GODAVARI DIST, AP." class="w-full p-2 border rounded-md" />
+        </div>
+
+        <hr class="my-4" />
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700">RST NO</label>
+          <input id="rstNo" readonly class="w-full p-2 border rounded-md bg-gray-100" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Vehicle No</label>
+          <input id="vehicleNo" value="AP39T2244" class="w-full p-2 border rounded-md" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Supplier</label>
+          <input id="supplier" class="w-full p-2 border rounded-md" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Address</label>
+          <input id="address" class="w-full p-2 border rounded-md" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Material</label>
+          <input id="material" value="BAGS" class="w-full p-2 border rounded-md" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">No. of Bags</label>
+          <input id="bags" type="number" value="206" class="w-full p-2 border rounded-md" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Gross (kg)</label>
+          <input id="gross" type="number" value="15900" class="w-full p-2 border rounded-md" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Tare (kg)</label>
+          <input id="tare" type="number" value="5600" class="w-full p-2 border rounded-md" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Charges (Rs)</label>
+          <input id="charges" type="number" value="150" class="w-full p-2 border rounded-md" />
+        </div>
+
+        <button type="submit" class="w-full mt-6 py-2 px-4 rounded-md bg-indigo-600 text-white hover:bg-indigo-700">
+          Generate PDF
+        </button>
+      </form>
+    </div>
+
+    <!-- Preview Section -->
+    <div class="w-full md:w-1/2 flex items-center justify-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+      <span class="text-gray-400 text-sm">PDF Preview will be downloaded.</span>
+    </div>
+  </div>
+
+  <script>
+    window.jsPDF = window.jspdf.jsPDF;
+
+    function numberToDigitsInWords(num) {
+      const wordMap = {
+        '0': 'ZERO','1': 'ONE','2': 'TWO','3': 'THREE','4': 'FOUR',
+        '5': 'FIVE','6': 'SIX','7': 'SEVEN','8': 'EIGHT','9': 'NINE'
+      };
+      return num.toString().split('').map(d => wordMap[d]).join(' ');
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("rstNo").value = Math.floor(1000 + Math.random() * 9000);
+    });
+
+    document.getElementById("slipForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+
+      const header1 = document.getElementById("headerLine1").value.toUpperCase();
+      const header2 = document.getElementById("headerLine2").value.toUpperCase();
+      const header3 = document.getElementById("headerLine3").value.toUpperCase();
+      const rstNo = document.getElementById("rstNo").value;
+      const vehicle = document.getElementById("vehicleNo").value.toUpperCase();
+      const supplier = document.getElementById("supplier").value.toUpperCase();
+      const address = document.getElementById("address").value.toUpperCase();
+      const material = document.getElementById("material").value.toUpperCase();
+      const bags = document.getElementById("bags").value;
+      const gross = parseFloat(document.getElementById("gross").value);
+      const tare = parseFloat(document.getElementById("tare").value);
+      const charges = parseFloat(document.getElementById("charges").value);
+
+      const net = gross - tare;
+      const netWords = numberToDigitsInWords(net);
+
+      const doc = new jsPDF();
+      const pageW = doc.internal.pageSize.getWidth();
+      let y = 20;
+
+      doc.setFontSize(14);
+      doc.text(header1, pageW/2, y, {align:'center'}); y+=6;
+      doc.setFontSize(10);
+      doc.text(header2, pageW/2, y, {align:'center'}); y+=5;
+      doc.text(header3, pageW/2, y, {align:'center'}); y+=10;
+
+      doc.setFontSize(10);
+      doc.text(`RST NO: ${rstNo}`, 20, y); doc.text(`VEHICLE: ${vehicle}`, pageW/2, y); y+=6;
+      doc.text(`SUPPLIER: ${supplier}`, 20, y); doc.text(`ADDRESS: ${address}`, pageW/2, y); y+=6;
+      doc.text(`MATERIAL: ${material}`, 20, y); doc.text(`BAGS: ${bags}`, pageW/2, y); y+=6;
+      doc.text("-------------------------------------------", 20, y); y+=6;
+
+      doc.text(`GROSS: ${gross}`, 20, y); y+=6;
+      doc.text(`TARE: ${tare}`, 20, y); y+=6;
+      doc.text("-------------------------------------------", 20, y); y+=6;
+
+      doc.text(`NET: ${net}`, 20, y); doc.text(netWords, pageW/2, y); y+=6;
+      doc.text(`Charges: Rs ${charges}`, 20, y); y+=12;
+      doc.text("Operator’s Signature: ___________", 20, y); y+=12;
+      doc.text("THANK YOU, VISIT AGAIN", pageW/2, y, {align:'center'});
+
+      doc.save(`${vehicle}_${rstNo}.pdf`);
+    });
+  </script>
+</body>
+</html>
