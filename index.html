@@ -160,36 +160,8 @@
         <button onclick="document.getElementById('messageBox').classList.add('scale-0')" class="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800">Dismiss</button>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDocs, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-
-        setLogLevel('debug'); // For debugging Firestore operations
+    <script>
         window.jsPDF = window.jspdf.jsPDF;
-
-        // 🔹 Replace this with your Firebase config (or keep placeholders and use local-only mode)
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-
-        // A quick heuristic to avoid attempting to initialize Firebase with placeholder values.
-        function isLikelyValidFirebaseConfig(cfg) {
-            return cfg && typeof cfg.apiKey === 'string' && cfg.apiKey.startsWith('AIza') && cfg.projectId && !cfg.projectId.includes('YOUR');
-        }
-
-        let useFirebase = isLikelyValidFirebaseConfig(firebaseConfig);
-        let app = null;
-        let db = null;
-        let auth = null;
-        let userId = null;
-        const appId = firebaseConfig.projectId || 'default-app-id';
 
         // Utility function to show a custom message box
         function showMessage(message) {
@@ -201,7 +173,7 @@
             }, 5000);
         }
 
-        // Function to convert a number to a digit-by-digit word string
+        // Convert number to digit words
         function numberToDigitsInWords(number) {
             if (typeof number !== 'number' || isNaN(number)) {
                 return '';
@@ -214,7 +186,7 @@
             return digits.map(digit => wordMap[digit] || digit).join(' ');
         }
 
-        // Local fallback storage helpers (used when Firebase is not configured)
+        // Local storage helpers
         function saveToLocal(collectionName, value) {
             if (!value) return;
             const key = `weighbridge_${collectionName}`;
@@ -222,7 +194,6 @@
             if (!arr.includes(value)) {
                 arr.push(value);
                 localStorage.setItem(key, JSON.stringify(arr));
-                console.log(`Saved locally to ${key}: ${value}`);
             }
         }
 
@@ -231,9 +202,8 @@
             return JSON.parse(localStorage.getItem(key) || '[]');
         }
 
-        // Function to fetch and populate dropdowns (works with Firestore or localStorage)
-        async function fetchDropdownData() {
-            // Map HTML datalist IDs to Firestore collection names
+        // Populate datalists
+        function fetchDropdownData() {
             const datalistMappings = {
                 'supplierList': 'suppliers',
                 'addressList': 'addresses',
@@ -244,63 +214,22 @@
             for (const listId in datalistMappings) {
                 const collectionName = datalistMappings[listId];
                 const datalist = document.getElementById(listId);
-
-                if (!datalist) {
-                    console.error(`Datalist for ${collectionName} not found.`);
-                    continue;
-                }
-
                 datalist.innerHTML = '';
-
-                if (useFirebase && db) {
-                    try {
-                        const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/${collectionName}`);
-                        const q = query(collectionRef);
-                        const querySnapshot = await getDocs(q);
-                        querySnapshot.forEach((docSnap) => {
-                            const option = document.createElement('option');
-                            option.value = docSnap.id;
-                            datalist.appendChild(option);
-                        });
-                    } catch (e) {
-                        console.error(`Error fetching data for ${collectionName}:`, e);
-                    }
-                } else {
-                    // Local fallback
-                    const arr = getLocalList(collectionName);
-                    arr.forEach(value => {
-                        const option = document.createElement('option');
-                        option.value = value;
-                        datalist.appendChild(option);
-                    });
-                }
+                const arr = getLocalList(collectionName);
+                arr.forEach(value => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    datalist.appendChild(option);
+                });
             }
         }
 
-        // Function to save a new value to Firestore or localStorage
-        async function saveToFirestore(collectionName, value) {
-            if (!value) return;
-
-            if (useFirebase && db) {
-                try {
-                    const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${value}`);
-                    await setDoc(docRef, {});
-                    console.log(`Document saved successfully to ${collectionName}: ${value}`);
-                } catch (e) {
-                    console.error('Error adding document: ', e);
-                }
-            } else {
-                saveToLocal(collectionName, value);
-            }
-        }
-
-        // Function to populate time dropdowns inside the picker
+        // Populate time dropdowns
         function populateTimeDropdowns() {
             const hourSelects = document.querySelectorAll('[id$="TimeHour"]');
             const minuteSelects = document.querySelectorAll('[id$="TimeMinute"]');
             const secondSelects = document.querySelectorAll('[id$="TimeSecond"]');
 
-            // Populate hours (1-12)
             hourSelects.forEach(select => {
                 for (let i = 1; i <= 12; i++) {
                     const option = document.createElement('option');
@@ -310,7 +239,6 @@
                 }
             });
 
-            // Populate minutes and seconds (0-59)
             minuteSelects.forEach(select => {
                 for (let i = 0; i < 60; i++) {
                     const option = document.createElement('option');
@@ -330,8 +258,8 @@
             });
         }
 
-        // Initialize (either Firebase or local fallback)
-        window.addEventListener('load', async () => {
+        // Initialize
+        window.addEventListener('load', () => {
             const now = new Date();
             const dateStr = now.toISOString().split('T')[0];
 
@@ -347,222 +275,16 @@
             document.getElementById('tareDate').value = dateStr;
             document.getElementById('tareTime').value = formattedTime;
 
-            // Generate a random 4-digit number for RST No. if it's a placeholder
             if (!document.getElementById('rstNo').value) {
                 document.getElementById('rstNo').value = Math.floor(1000 + Math.random() * 9000);
             }
 
-            // Populate the time picker dropdowns
             populateTimeDropdowns();
-
-            // If Firebase is enabled, initialize it; otherwise use local fallback
-            if (useFirebase) {
-                try {
-                    app = initializeApp(firebaseConfig);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
-
-                    onAuthStateChanged(auth, async (user) => {
-                        if (user) {
-                            userId = user.uid;
-                            console.log('Firebase signed in with user:', userId);
-                            await fetchDropdownData();
-                        } else {
-                            // No Firebase user (rare after anonymous sign-in failure), fall back to local
-                            userId = crypto.randomUUID();
-                            console.log('No firebase user detected, using local userId:', userId);
-                            localStorage.setItem('weighbridge_user', userId);
-                            await fetchDropdownData();
-                        }
-                    });
-
-                    // If a custom token is available globally, try it first
-                    if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
-                        signInWithCustomToken(auth, window.__initial_auth_token)
-                            .catch((error) => {
-                                console.error('Firebase custom auth failed:', error);
-                                signInAnonymously(auth);
-                            });
-                    } else {
-                        signInAnonymously(auth).catch((e) => {
-                            console.error('Anonymous sign-in failed:', e);
-                            showMessage('Firebase sign-in failed. Running in local-only mode.');
-                            useFirebase = false;
-                            // Setup local fallback
-                            userId = localStorage.getItem('weighbridge_user') || crypto.randomUUID();
-                            localStorage.setItem('weighbridge_user', userId);
-                            fetchDropdownData();
-                        });
-                    }
-                } catch (e) {
-                    console.error('Firebase initialization failed:', e);
-                    showMessage('Firebase initialization failed — running in local-only mode.');
-                    useFirebase = false;
-                    userId = localStorage.getItem('weighbridge_user') || crypto.randomUUID();
-                    localStorage.setItem('weighbridge_user', userId);
-                    await fetchDropdownData();
-                }
-            } else {
-                // Local-only mode
-                showMessage('Firebase config missing/invalid — running in local-only mode. Add a valid firebaseConfig object to enable cloud sync.');
-                userId = localStorage.getItem('weighbridge_user') || crypto.randomUUID();
-                localStorage.setItem('weighbridge_user', userId);
-                await fetchDropdownData();
-            }
+            fetchDropdownData();
         });
 
-        // Toggle time picker modal
+        // Time picker toggle
         document.getElementById('grossTime').addEventListener('click', (e) => {
             e.stopPropagation();
             document.getElementById('grossTimePicker').style.display = 'block';
-            document.getElementById('tareTimePicker').style.display = 'none';
-        });
-
-        document.getElementById('tareTime').addEventListener('click', (e) => {
-            e.stopPropagation();
-            document.getElementById('tareTimePicker').style.display = 'block';
-            document.getElementById('grossTimePicker').style.display = 'none';
-        });
-
-        // Hide time picker when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.time-picker-container')) {
-                document.getElementById('grossTimePicker').style.display = 'none';
-                document.getElementById('tareTimePicker').style.display = 'none';
-            }
-        });
-
-        // Handle time selection for Gross
-        document.getElementById('grossTimePicker').addEventListener('change', () => {
-            const h = document.getElementById('grossTimeHour').value;
-            const m = document.getElementById('grossTimeMinute').value;
-            const s = document.getElementById('grossTimeSecond').value;
-            const ampm = document.getElementById('grossTimeMeridiem').value;
-            document.getElementById('grossTime').value = `${h}:${m}:${s} ${ampm}`;
-        });
-
-        // Handle time selection for Tare
-        document.getElementById('tareTimePicker').addEventListener('change', () => {
-            const h = document.getElementById('tareTimeHour').value;
-            const m = document.getElementById('tareTimeMinute').value;
-            const s = document.getElementById('tareTimeSecond').value;
-            const ampm = document.getElementById('tareTimeMeridiem').value;
-            document.getElementById('tareTime').value = `${h}:${m}:${s} ${ampm}`;
-        });
-
-        document.getElementById('slipForm').addEventListener('submit', async function(event) {
-            event.preventDefault();
-
-            // Get form data and convert to uppercase where required
-            const headerLine1 = document.getElementById('headerLine1').value.toUpperCase();
-            const headerLine2 = document.getElementById('headerLine2').value.toUpperCase();
-            const headerLine3 = document.getElementById('headerLine3').value.toUpperCase();
-            const rstNo = document.getElementById('rstNo').value;
-            const vehicleNo = document.getElementById('vehicleNo').value.toUpperCase();
-            const supplier = document.getElementById('supplier').value.toUpperCase();
-            const address = document.getElementById('address').value.toUpperCase();
-            const material = document.getElementById('material').value.toUpperCase();
-            const bags = document.getElementById('bags').value;
-            const gross = parseFloat(document.getElementById('gross').value);
-            const tare = parseFloat(document.getElementById('tare').value);
-            const charges = parseFloat(document.getElementById('charges').value);
-            const grossDate = document.getElementById('grossDate').value;
-            const grossTime = document.getElementById('grossTime').value;
-            const tareDate = document.getElementById('tareDate').value;
-            const tareTime = document.getElementById('tareTime').value;
-            
-            // Check for valid numbers
-            if (isNaN(gross) || isNaN(tare)) {
-                showMessage("Please enter valid numbers for Gross and Tare.");
-                return;
-            }
-
-            // Save form data to Firestore for future use (or save locally if Firebase disabled)
-            await saveToFirestore('suppliers', supplier);
-            await saveToFirestore('addresses', address);
-            await saveToFirestore('materials', material);
-            await saveToFirestore('vehicleNo', vehicleNo);
-
-            const net = gross - tare;
-            const netInWords = numberToDigitsInWords(net);
-
-            // Initialize PDF
-            const doc = new jsPDF();
-            const docWidth = doc.internal.pageSize.getWidth();
-            const margin = 20;
-            const col1X = margin;
-            const col2X = docWidth / 2;
-            let yPos = margin;
-
-            // Header (dynamic layout)
-            doc.setFontSize(14);
-            doc.text(headerLine1, docWidth / 2, yPos, { align: 'center' });
-            yPos += 5;
-            doc.setFontSize(10);
-            doc.text(headerLine2, docWidth / 2, yPos, { align: 'center' });
-            yPos += 5;
-            doc.text(headerLine3, docWidth / 2, yPos, { align: 'center' });
-            
-            yPos += 15;
-
-            // Form data (two columns with fixed spacing)
-            doc.setFontSize(10);
-            const lineSpacing = 8;
-            
-            doc.text(`RST NO: ${rstNo}`, col1X, yPos);
-            doc.text(`VEHICLE NO: ${vehicleNo}`, col2X, yPos);
-            yPos += lineSpacing;
-            
-            doc.text(`SUPPLIER: ${supplier}`, col1X, yPos);
-            doc.text(`ADDRESS: ${address}`, col2X, yPos);
-            yPos += lineSpacing;
-            
-            doc.text(`MATERIAL: ${material}`, col1X, yPos);
-            doc.text(`NO OF BAGS: ${bags}`, col2X, yPos);
-            yPos += lineSpacing;
-
-            doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
-            yPos += lineSpacing;
-
-            doc.text(`GROSS : ${gross}`, col1X, yPos);
-            doc.text(`DATE : ${grossDate}`, col2X, yPos);
-            doc.text(`Time : ${grossTime}`, col2X + 35, yPos);
-            yPos += lineSpacing;
-            
-            doc.text(`TARE : ${tare}`, col1X, yPos);
-            doc.text(`DATE : ${tareDate}`, col2X, yPos);
-            doc.text(`Time : ${tareTime}`, col2X + 35, yPos);
-            yPos += lineSpacing;
-
-            doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
-            yPos += lineSpacing;
-
-            doc.text(`NETT : ${net}`, col1X, yPos);
-            doc.text(netInWords, col2X, yPos);
-            yPos += lineSpacing;
-            
-            doc.text(`Charges (1): Rs ${charges}`, col1X, yPos);
-            yPos += lineSpacing;
-            
-            doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
-            yPos += lineSpacing;
-            
-            doc.text("Operator's Signature:", col1X, yPos);
-            yPos += lineSpacing;
-            
-            doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
-            yPos += lineSpacing;
-
-            // "THANK YOU VISIT AGAIN" is now placed right after the last text
-            doc.text("THANK YOU VISIT AGAIN", docWidth / 2, yPos, { align: 'center' });
-            yPos += lineSpacing;
-            
-
-            // Save the PDF with the dynamic filename
-            doc.save(`${vehicleNo}_${grossDate}.pdf`);
-
-            showMessage("PDF generated successfully!");
-        });
-    </script>
-</body>
-</html>
+            document.getElementById('tareTime
