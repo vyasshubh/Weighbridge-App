@@ -161,41 +161,13 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDocs, collection, query, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-
-        setLogLevel('debug'); // For debugging Firestore operations
+        // Firebase removed. Using localStorage fallback for dropdown persistence.
         window.jsPDF = window.jspdf.jsPDF;
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        let userId = null;
-
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                userId = user.uid;
-                console.log("Firebase signed in with user:", userId);
-                await fetchDropdownData();
-            } else {
-                userId = crypto.randomUUID();
-                console.log("Firebase signed in anonymously with user:", userId);
-            }
-        });
-
-        if (typeof __initial_auth_token !== 'undefined') {
-            signInWithCustomToken(auth, __initial_auth_token)
-                .catch((error) => {
-                    console.error("Firebase custom auth failed:", error);
-                    signInAnonymously(auth);
-                });
-        } else {
-            signInAnonymously(auth);
-        }
+        // If you used to provide an initial auth token, we keep it as userId to mimic prior behavior.
+        let userId = (typeof __initial_auth_token !== 'undefined') ? String(__initial_auth_token) : crypto.randomUUID();
+        console.log("Running in no-Firebase mode. userId:", userId);
 
         // Utility function to show a custom message box
         function showMessage(message) {
@@ -220,14 +192,14 @@
             return digits.map(digit => wordMap[digit]).join(' ');
         }
         
-        // Function to fetch and populate dropdowns
+        // Function to fetch and populate dropdowns (localStorage implementation)
         async function fetchDropdownData() {
             if (!userId) {
                 console.log("UserID is null, cannot fetch dropdown data.");
                 return;
             }
 
-            // Map HTML datalist IDs to Firestore collection names
+            // Map HTML datalist IDs to logical collection names
             const datalistMappings = {
                 'supplierList': 'suppliers',
                 'addressList': 'addresses',
@@ -241,36 +213,40 @@
 
                 if (datalist) {
                     try {
-                        const collectionRef = collection(db, artifacts/${appId}/users/${userId}/${collectionName});
-                        const q = query(collectionRef);
-                        const querySnapshot = await getDocs(q);
+                        const key = 'artifacts_' + appId + '_users_' + userId + '_' + collectionName;
+                        const stored = localStorage.getItem(key);
+                        const values = stored ? JSON.parse(stored) : [];
                         datalist.innerHTML = '';
-                        querySnapshot.forEach((doc) => {
+                        values.forEach((val) => {
                             const option = document.createElement('option');
-                            option.value = doc.id;
+                            option.value = val;
                             datalist.appendChild(option);
                         });
                     } catch (e) {
-                        console.error(Error fetching data for ${collectionName}:, e);
+                        console.error("Error fetching data for " + collectionName + ":", e);
                     }
                 } else {
-                    console.error(Datalist for ${collectionName} not found.);
+                    console.error("Datalist for " + collectionName + " not found.");
                 }
             }
         }
 
-        // Function to save a new value to Firestore
+        // Function to save a new value to localStorage (replaces Firestore save)
         async function saveToFirestore(collectionName, value) {
             if (!userId || !value) {
-                console.log("Cannot save to Firestore: userId or value is null.");
+                console.log("Cannot save to storage: userId or value is null.");
                 return;
             }
-            const docRef = doc(db, artifacts/${appId}/users/${userId}/${collectionName}/${value});
             try {
-                await setDoc(docRef, {});
-                console.log(Document saved successfully to ${collectionName}: ${value});
+                const key = 'artifacts_' + appId + '_users_' + userId + '_' + collectionName;
+                const arr = JSON.parse(localStorage.getItem(key) || '[]');
+                if (!arr.includes(value)) {
+                    arr.push(value);
+                    localStorage.setItem(key, JSON.stringify(arr));
+                }
+                console.log("Saved locally to " + collectionName + ": " + value);
             } catch (e) {
-                console.error("Error adding document: ", e);
+                console.error("Error saving document: ", e);
             }
         }
 
@@ -320,7 +296,7 @@
             const seconds = now.getSeconds();
             const ampm = hours >= 12 ? 'PM' : 'AM';
             const displayHours = hours % 12 || 12;
-            const formattedTime = ${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} ${ampm};
+            const formattedTime = `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} ${ampm}`;
 
             document.getElementById('grossDate').value = dateStr;
             document.getElementById('grossTime').value = formattedTime;
@@ -332,6 +308,9 @@
 
             // Populate the time picker dropdowns
             populateTimeDropdowns();
+
+            // Fetch and populate datalists from localStorage
+            fetchDropdownData();
         });
 
         // Toggle time picker modal
@@ -361,7 +340,7 @@
             const m = document.getElementById('grossTimeMinute').value;
             const s = document.getElementById('grossTimeSecond').value;
             const ampm = document.getElementById('grossTimeMeridiem').value;
-            document.getElementById('grossTime').value = ${h}:${m}:${s} ${ampm};
+            document.getElementById('grossTime').value = `${h}:${m}:${s} ${ampm}`;
         });
 
         // Handle time selection for Tare
@@ -370,7 +349,7 @@
             const m = document.getElementById('tareTimeMinute').value;
             const s = document.getElementById('tareTimeSecond').value;
             const ampm = document.getElementById('tareTimeMeridiem').value;
-            document.getElementById('tareTime').value = ${h}:${m}:${s} ${ampm};
+            document.getElementById('tareTime').value = `${h}:${m}:${s} ${ampm}`;
         });
 
         document.getElementById('slipForm').addEventListener('submit', async function(event) {
@@ -400,7 +379,7 @@
                 return;
             }
 
-            // Save form data to Firestore for future use
+            // Save form data to localStorage for future use (replaces Firestore saves)
             await saveToFirestore('suppliers', supplier);
             await saveToFirestore('addresses', address);
             await saveToFirestore('materials', material);
@@ -432,39 +411,39 @@
             doc.setFontSize(10);
             const lineSpacing = 8;
             
-            doc.text(RST NO: ${rstNo}, col1X, yPos);
-            doc.text(VEHICLE NO: ${vehicleNo}, col2X, yPos);
+            doc.text('RST NO: ' + rstNo, col1X, yPos);
+            doc.text('VEHICLE NO: ' + vehicleNo, col2X, yPos);
             yPos += lineSpacing;
             
-            doc.text(SUPPLIER: ${supplier}, col1X, yPos);
-            doc.text(ADDRESS: ${address}, col2X, yPos);
+            doc.text('SUPPLIER: ' + supplier, col1X, yPos);
+            doc.text('ADDRESS: ' + address, col2X, yPos);
             yPos += lineSpacing;
             
-            doc.text(MATERIAL: ${material}, col1X, yPos);
-            doc.text(NO OF BAGS: ${bags}, col2X, yPos);
+            doc.text('MATERIAL: ' + material, col1X, yPos);
+            doc.text('NO OF BAGS: ' + bags, col2X, yPos);
             yPos += lineSpacing;
 
             doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
             yPos += lineSpacing;
 
-            doc.text(GROSS : ${gross}, col1X, yPos);
-            doc.text(DATE : ${grossDate}, col2X, yPos);
-            doc.text(Time : ${grossTime}, col2X + 35, yPos);
+            doc.text('GROSS : ' + gross, col1X, yPos);
+            doc.text('DATE : ' + grossDate, col2X, yPos);
+            doc.text('Time : ' + grossTime, col2X + 35, yPos);
             yPos += lineSpacing;
             
-            doc.text(TARE : ${tare}, col1X, yPos);
-            doc.text(DATE : ${tareDate}, col2X, yPos);
-            doc.text(Time : ${tareTime}, col2X + 35, yPos);
+            doc.text('TARE : ' + tare, col1X, yPos);
+            doc.text('DATE : ' + tareDate, col2X, yPos);
+            doc.text('Time : ' + tareTime, col2X + 35, yPos);
             yPos += lineSpacing;
 
             doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
             yPos += lineSpacing;
 
-            doc.text(NETT : ${net}, col1X, yPos);
+            doc.text('NETT : ' + net, col1X, yPos);
             doc.text(netInWords, col2X, yPos);
             yPos += lineSpacing;
             
-            doc.text(Charges (1): Rs ${charges}, col1X, yPos);
+            doc.text('Charges (1): Rs ' + charges, col1X, yPos);
             yPos += lineSpacing;
             
             doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
@@ -482,7 +461,7 @@
             
 
             // Save the PDF with the dynamic filename
-            doc.save(${vehicleNo}_${grossDate}.pdf);
+            doc.save(`${vehicleNo}_${grossDate}.pdf`);
 
             showMessage("PDF generated successfully!");
         });
