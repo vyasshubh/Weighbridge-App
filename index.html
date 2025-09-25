@@ -163,39 +163,33 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDocs, collection, query, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDocs, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
         setLogLevel('debug'); // For debugging Firestore operations
         window.jsPDF = window.jspdf.jsPDF;
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        let userId = null;
+        // 🔹 Replace this with your Firebase config (or keep placeholders and use local-only mode)
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
 
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                userId = user.uid;
-                console.log("Firebase signed in with user:", userId);
-                await fetchDropdownData();
-            } else {
-                userId = crypto.randomUUID();
-                console.log("Firebase signed in anonymously with user:", userId);
-            }
-        });
-
-        if (typeof __initial_auth_token !== 'undefined') {
-            signInWithCustomToken(auth, __initial_auth_token)
-                .catch((error) => {
-                    console.error("Firebase custom auth failed:", error);
-                    signInAnonymously(auth);
-                });
-        } else {
-            signInAnonymously(auth);
+        // A quick heuristic to avoid attempting to initialize Firebase with placeholder values.
+        function isLikelyValidFirebaseConfig(cfg) {
+            return cfg && typeof cfg.apiKey === 'string' && cfg.apiKey.startsWith('AIza') && cfg.projectId && !cfg.projectId.includes('YOUR');
         }
+
+        let useFirebase = isLikelyValidFirebaseConfig(firebaseConfig);
+        let app = null;
+        let db = null;
+        let auth = null;
+        let userId = null;
+        const appId = firebaseConfig.projectId || 'default-app-id';
 
         // Utility function to show a custom message box
         function showMessage(message) {
@@ -217,16 +211,28 @@
                 '0': 'ZERO', '1': 'ONE', '2': 'TWO', '3': 'THREE', '4': 'FOUR',
                 '5': 'FIVE', '6': 'SIX', '7': 'SEVEN', '8': 'EIGHT', '9': 'NINE'
             };
-            return digits.map(digit => wordMap[digit]).join(' ');
+            return digits.map(digit => wordMap[digit] || digit).join(' ');
         }
-        
-        // Function to fetch and populate dropdowns
-        async function fetchDropdownData() {
-            if (!userId) {
-                console.log("UserID is null, cannot fetch dropdown data.");
-                return;
-            }
 
+        // Local fallback storage helpers (used when Firebase is not configured)
+        function saveToLocal(collectionName, value) {
+            if (!value) return;
+            const key = `weighbridge_${collectionName}`;
+            const arr = JSON.parse(localStorage.getItem(key) || '[]');
+            if (!arr.includes(value)) {
+                arr.push(value);
+                localStorage.setItem(key, JSON.stringify(arr));
+                console.log(`Saved locally to ${key}: ${value}`);
+            }
+        }
+
+        function getLocalList(collectionName) {
+            const key = `weighbridge_${collectionName}`;
+            return JSON.parse(localStorage.getItem(key) || '[]');
+        }
+
+        // Function to fetch and populate dropdowns (works with Firestore or localStorage)
+        async function fetchDropdownData() {
             // Map HTML datalist IDs to Firestore collection names
             const datalistMappings = {
                 'supplierList': 'suppliers',
@@ -239,38 +245,52 @@
                 const collectionName = datalistMappings[listId];
                 const datalist = document.getElementById(listId);
 
-                if (datalist) {
+                if (!datalist) {
+                    console.error(`Datalist for ${collectionName} not found.`);
+                    continue;
+                }
+
+                datalist.innerHTML = '';
+
+                if (useFirebase && db) {
                     try {
-                        const collectionRef = collection(db, artifacts/${appId}/users/${userId}/${collectionName});
+                        const collectionRef = collection(db, `artifacts/${appId}/users/${userId}/${collectionName}`);
                         const q = query(collectionRef);
                         const querySnapshot = await getDocs(q);
-                        datalist.innerHTML = '';
-                        querySnapshot.forEach((doc) => {
+                        querySnapshot.forEach((docSnap) => {
                             const option = document.createElement('option');
-                            option.value = doc.id;
+                            option.value = docSnap.id;
                             datalist.appendChild(option);
                         });
                     } catch (e) {
-                        console.error(Error fetching data for ${collectionName}:, e);
+                        console.error(`Error fetching data for ${collectionName}:`, e);
                     }
                 } else {
-                    console.error(Datalist for ${collectionName} not found.);
+                    // Local fallback
+                    const arr = getLocalList(collectionName);
+                    arr.forEach(value => {
+                        const option = document.createElement('option');
+                        option.value = value;
+                        datalist.appendChild(option);
+                    });
                 }
             }
         }
 
-        // Function to save a new value to Firestore
+        // Function to save a new value to Firestore or localStorage
         async function saveToFirestore(collectionName, value) {
-            if (!userId || !value) {
-                console.log("Cannot save to Firestore: userId or value is null.");
-                return;
-            }
-            const docRef = doc(db, artifacts/${appId}/users/${userId}/${collectionName}/${value});
-            try {
-                await setDoc(docRef, {});
-                console.log(Document saved successfully to ${collectionName}: ${value});
-            } catch (e) {
-                console.error("Error adding document: ", e);
+            if (!value) return;
+
+            if (useFirebase && db) {
+                try {
+                    const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${value}`);
+                    await setDoc(docRef, {});
+                    console.log(`Document saved successfully to ${collectionName}: ${value}`);
+                } catch (e) {
+                    console.error('Error adding document: ', e);
+                }
+            } else {
+                saveToLocal(collectionName, value);
             }
         }
 
@@ -310,28 +330,85 @@
             });
         }
 
-        // Set default date and time
-        window.addEventListener('load', () => {
+        // Initialize (either Firebase or local fallback)
+        window.addEventListener('load', async () => {
             const now = new Date();
             const dateStr = now.toISOString().split('T')[0];
-            
+
             const hours = now.getHours();
             const minutes = now.getMinutes();
             const seconds = now.getSeconds();
             const ampm = hours >= 12 ? 'PM' : 'AM';
             const displayHours = hours % 12 || 12;
-            const formattedTime = ${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} ${ampm};
+            const formattedTime = `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} ${ampm}`;
 
             document.getElementById('grossDate').value = dateStr;
             document.getElementById('grossTime').value = formattedTime;
             document.getElementById('tareDate').value = dateStr;
             document.getElementById('tareTime').value = formattedTime;
-            
-            // Generate a random 4-digit number for RST No.
-            document.getElementById('rstNo').value = Math.floor(1000 + Math.random() * 9000);
+
+            // Generate a random 4-digit number for RST No. if it's a placeholder
+            if (!document.getElementById('rstNo').value) {
+                document.getElementById('rstNo').value = Math.floor(1000 + Math.random() * 9000);
+            }
 
             // Populate the time picker dropdowns
             populateTimeDropdowns();
+
+            // If Firebase is enabled, initialize it; otherwise use local fallback
+            if (useFirebase) {
+                try {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+
+                    onAuthStateChanged(auth, async (user) => {
+                        if (user) {
+                            userId = user.uid;
+                            console.log('Firebase signed in with user:', userId);
+                            await fetchDropdownData();
+                        } else {
+                            // No Firebase user (rare after anonymous sign-in failure), fall back to local
+                            userId = crypto.randomUUID();
+                            console.log('No firebase user detected, using local userId:', userId);
+                            localStorage.setItem('weighbridge_user', userId);
+                            await fetchDropdownData();
+                        }
+                    });
+
+                    // If a custom token is available globally, try it first
+                    if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+                        signInWithCustomToken(auth, window.__initial_auth_token)
+                            .catch((error) => {
+                                console.error('Firebase custom auth failed:', error);
+                                signInAnonymously(auth);
+                            });
+                    } else {
+                        signInAnonymously(auth).catch((e) => {
+                            console.error('Anonymous sign-in failed:', e);
+                            showMessage('Firebase sign-in failed. Running in local-only mode.');
+                            useFirebase = false;
+                            // Setup local fallback
+                            userId = localStorage.getItem('weighbridge_user') || crypto.randomUUID();
+                            localStorage.setItem('weighbridge_user', userId);
+                            fetchDropdownData();
+                        });
+                    }
+                } catch (e) {
+                    console.error('Firebase initialization failed:', e);
+                    showMessage('Firebase initialization failed — running in local-only mode.');
+                    useFirebase = false;
+                    userId = localStorage.getItem('weighbridge_user') || crypto.randomUUID();
+                    localStorage.setItem('weighbridge_user', userId);
+                    await fetchDropdownData();
+                }
+            } else {
+                // Local-only mode
+                showMessage('Firebase config missing/invalid — running in local-only mode. Add a valid firebaseConfig object to enable cloud sync.');
+                userId = localStorage.getItem('weighbridge_user') || crypto.randomUUID();
+                localStorage.setItem('weighbridge_user', userId);
+                await fetchDropdownData();
+            }
         });
 
         // Toggle time picker modal
@@ -361,7 +438,7 @@
             const m = document.getElementById('grossTimeMinute').value;
             const s = document.getElementById('grossTimeSecond').value;
             const ampm = document.getElementById('grossTimeMeridiem').value;
-            document.getElementById('grossTime').value = ${h}:${m}:${s} ${ampm};
+            document.getElementById('grossTime').value = `${h}:${m}:${s} ${ampm}`;
         });
 
         // Handle time selection for Tare
@@ -370,7 +447,7 @@
             const m = document.getElementById('tareTimeMinute').value;
             const s = document.getElementById('tareTimeSecond').value;
             const ampm = document.getElementById('tareTimeMeridiem').value;
-            document.getElementById('tareTime').value = ${h}:${m}:${s} ${ampm};
+            document.getElementById('tareTime').value = `${h}:${m}:${s} ${ampm}`;
         });
 
         document.getElementById('slipForm').addEventListener('submit', async function(event) {
@@ -400,7 +477,7 @@
                 return;
             }
 
-            // Save form data to Firestore for future use
+            // Save form data to Firestore for future use (or save locally if Firebase disabled)
             await saveToFirestore('suppliers', supplier);
             await saveToFirestore('addresses', address);
             await saveToFirestore('materials', material);
@@ -432,45 +509,45 @@
             doc.setFontSize(10);
             const lineSpacing = 8;
             
-            doc.text(RST NO: ${rstNo}, col1X, yPos);
-            doc.text(VEHICLE NO: ${vehicleNo}, col2X, yPos);
+            doc.text(`RST NO: ${rstNo}`, col1X, yPos);
+            doc.text(`VEHICLE NO: ${vehicleNo}`, col2X, yPos);
             yPos += lineSpacing;
             
-            doc.text(SUPPLIER: ${supplier}, col1X, yPos);
-            doc.text(ADDRESS: ${address}, col2X, yPos);
+            doc.text(`SUPPLIER: ${supplier}`, col1X, yPos);
+            doc.text(`ADDRESS: ${address}`, col2X, yPos);
             yPos += lineSpacing;
             
-            doc.text(MATERIAL: ${material}, col1X, yPos);
-            doc.text(NO OF BAGS: ${bags}, col2X, yPos);
+            doc.text(`MATERIAL: ${material}`, col1X, yPos);
+            doc.text(`NO OF BAGS: ${bags}`, col2X, yPos);
             yPos += lineSpacing;
 
             doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
             yPos += lineSpacing;
 
-            doc.text(GROSS : ${gross}, col1X, yPos);
-            doc.text(DATE : ${grossDate}, col2X, yPos);
-            doc.text(Time : ${grossTime}, col2X + 35, yPos);
+            doc.text(`GROSS : ${gross}`, col1X, yPos);
+            doc.text(`DATE : ${grossDate}`, col2X, yPos);
+            doc.text(`Time : ${grossTime}`, col2X + 35, yPos);
             yPos += lineSpacing;
             
-            doc.text(TARE : ${tare}, col1X, yPos);
-            doc.text(DATE : ${tareDate}, col2X, yPos);
-            doc.text(Time : ${tareTime}, col2X + 35, yPos);
+            doc.text(`TARE : ${tare}`, col1X, yPos);
+            doc.text(`DATE : ${tareDate}`, col2X, yPos);
+            doc.text(`Time : ${tareTime}`, col2X + 35, yPos);
             yPos += lineSpacing;
 
             doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
             yPos += lineSpacing;
 
-            doc.text(NETT : ${net}, col1X, yPos);
+            doc.text(`NETT : ${net}`, col1X, yPos);
             doc.text(netInWords, col2X, yPos);
             yPos += lineSpacing;
             
-            doc.text(Charges (1): Rs ${charges}, col1X, yPos);
+            doc.text(`Charges (1): Rs ${charges}`, col1X, yPos);
             yPos += lineSpacing;
             
-            doc.text("------------------------------------------------------------------------------------------------------------------------------------------------", margin, yPos);
+            doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
             yPos += lineSpacing;
             
-            doc.text("Operator’s Signature:", col1X, yPos);
+            doc.text("Operator's Signature:", col1X, yPos);
             yPos += lineSpacing;
             
             doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
@@ -482,7 +559,7 @@
             
 
             // Save the PDF with the dynamic filename
-            doc.save(${vehicleNo}_${grossDate}.pdf);
+            doc.save(`${vehicleNo}_${grossDate}.pdf`);
 
             showMessage("PDF generated successfully!");
         });
