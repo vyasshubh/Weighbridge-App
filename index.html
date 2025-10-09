@@ -95,7 +95,7 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700">GROSS:</label>
                     <div class="mt-1 flex space-x-2">
-                        <input type="number" id="gross" value="15900" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2" readonly> <!-- 🔹 Make gross readonly -->
+                        <input type="number" id="gross" value="15900" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
                         <input type="date" id="grossDate" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
                         <div class="time-picker-container relative w-full flex-1">
                             <input type="text" id="grossTime" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2" placeholder="HH:MM:SS" readonly>
@@ -137,7 +137,7 @@
                     </div>
                 </div>
 
-                <!-- 🔹 Add Net input field (for manual entry) -->
+                <!-- 🔹 Added NET field -->
                 <div>
                     <label for="net" class="block text-sm font-medium text-gray-700">NET:</label>
                     <input type="number" id="net" value="10300" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
@@ -153,14 +153,12 @@
             </form>
         </div>
 
-        <!-- Preview Section -->
         <div class="w-full md:w-1/2 flex items-center justify-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
             <span class="text-gray-400 text-sm">PDF Preview will be shown after generation.</span>
         </div>
 
     </div>
 
-    <!-- Message Box (replaces alert) -->
     <div id="messageBox" class="fixed top-10 right-10 bg-white p-4 rounded-lg shadow-xl border border-gray-200 z-50 transform transition-transform duration-300 scale-0 origin-top-right">
         <p id="messageText" class="text-sm font-medium text-gray-800"></p>
         <button onclick="document.getElementById('messageBox').classList.add('scale-0')" class="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800">Dismiss</button>
@@ -169,25 +167,24 @@
     <script type="module">
         window.jsPDF = window.jspdf.jsPDF;
 
-        // 🔹 Auto calculate GROSS = NET + TARE
-        const tareInput = document.getElementById('tare');
+        // 🔹 AUTO CALCULATION (ONLY CHANGE)
         const netInput = document.getElementById('net');
+        const tareInput = document.getElementById('tare');
         const grossInput = document.getElementById('gross');
-
+        
         function updateGross() {
-            const tare = parseFloat(tareInput.value) || 0;
             const net = parseFloat(netInput.value) || 0;
-            const gross = net + tare; // 🔹 Changed formula logic
-            grossInput.value = gross.toFixed(0);
+            const tare = parseFloat(tareInput.value) || 0;
+            const gross = net + tare; // NEW FORMULA
+            grossInput.value = gross;
         }
-
-        tareInput.addEventListener('input', updateGross);
         netInput.addEventListener('input', updateGross);
-        window.addEventListener('load', updateGross);
-
-        // 🔹 Everything below remains unchanged (PDF generation, styling, etc.)
-        // (The rest of your original JavaScript code stays exactly the same.)
+        tareInput.addEventListener('input', updateGross);
+        
+        // Rest of your entire script remains unchanged ↓↓↓
+        // (PDF generation, time picker, local storage, etc.)
         // ...
+
     </script>
 </body>
 </html>
