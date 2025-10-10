@@ -137,12 +137,6 @@
                     </div>
                 </div>
 
-                <!-- 🔹 Added NET field -->
-                <div>
-                    <label for="net" class="block text-sm font-medium text-gray-700">NET:</label>
-                    <input type="number" id="net" value="10300" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                </div>
-
                 <div>
                     <label for="charges" class="block text-sm font-medium text-gray-700">Charges (1):</label>
                     <input type="number" id="charges" value="150" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
@@ -153,38 +147,324 @@
             </form>
         </div>
 
+        <!-- Preview Section -->
         <div class="w-full md:w-1/2 flex items-center justify-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
             <span class="text-gray-400 text-sm">PDF Preview will be shown after generation.</span>
         </div>
 
     </div>
 
+    <!-- Message Box (replaces alert) -->
     <div id="messageBox" class="fixed top-10 right-10 bg-white p-4 rounded-lg shadow-xl border border-gray-200 z-50 transform transition-transform duration-300 scale-0 origin-top-right">
         <p id="messageText" class="text-sm font-medium text-gray-800"></p>
         <button onclick="document.getElementById('messageBox').classList.add('scale-0')" class="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800">Dismiss</button>
     </div>
 
     <script type="module">
+        // Firebase removed. Using localStorage fallback for dropdown persistence.
         window.jsPDF = window.jspdf.jsPDF;
 
-        // 🔹 AUTO CALCULATION (ONLY CHANGE)
-        const netInput = document.getElementById('net');
-        const tareInput = document.getElementById('tare');
-        const grossInput = document.getElementById('gross');
-        
-        function updateGross() {
-            const net = parseFloat(netInput.value) || 0;
-            const tare = parseFloat(tareInput.value) || 0;
-            const gross = net + tare; // NEW FORMULA
-            grossInput.value = gross;
-        }
-        netInput.addEventListener('input', updateGross);
-        tareInput.addEventListener('input', updateGross);
-        
-        // Rest of your entire script remains unchanged ↓↓↓
-        // (PDF generation, time picker, local storage, etc.)
-        // ...
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // If you used to provide an initial auth token, we keep it as userId to mimic prior behavior.
+        let userId = (typeof _initial_auth_token !== 'undefined') ? String(_initial_auth_token) : crypto.randomUUID();
+        console.log("Running in no-Firebase mode. userId:", userId);
 
+        // Utility function to show a custom message box
+        function showMessage(message) {
+            const messageBox = document.getElementById('messageBox');
+            document.getElementById('messageText').innerText = message;
+            messageBox.classList.remove('scale-0');
+            setTimeout(() => {
+                messageBox.classList.add('scale-0');
+            }, 5000);
+        }
+
+        // Function to convert a number to a digit-by-digit word string
+        function numberToDigitsInWords(number) {
+            if (typeof number !== 'number' || isNaN(number)) {
+                return '';
+            }
+            const digits = number.toString().split('');
+            const wordMap = {
+                '0': 'ZERO', '1': 'ONE', '2': 'TWO', '3': 'THREE', '4': 'FOUR',
+                '5': 'FIVE', '6': 'SIX', '7': 'SEVEN', '8': 'EIGHT', '9': 'NINE'
+            };
+            return digits.map(digit => wordMap[digit]).join(' ');
+        }
+        
+        // Function to fetch and populate dropdowns (localStorage implementation)
+        async function fetchDropdownData() {
+            if (!userId) {
+                console.log("UserID is null, cannot fetch dropdown data.");
+                return;
+            }
+
+            // Map HTML datalist IDs to logical collection names
+            const datalistMappings = {
+                'supplierList': 'suppliers',
+                'addressList': 'addresses',
+                'materialList': 'materials',
+                'vehicleNoList': 'vehicleNo'
+            };
+
+            for (const listId in datalistMappings) {
+                const collectionName = datalistMappings[listId];
+                const datalist = document.getElementById(listId);
+
+                if (datalist) {
+                    try {
+                        const key = 'artifacts_' + appId + 'users' + userId + '_' + collectionName;
+                        const stored = localStorage.getItem(key);
+                        const values = stored ? JSON.parse(stored) : [];
+                        datalist.innerHTML = '';
+                        values.forEach((val) => {
+                            const option = document.createElement('option');
+                            option.value = val;
+                            datalist.appendChild(option);
+                        });
+                    } catch (e) {
+                        console.error("Error fetching data for " + collectionName + ":", e);
+                    }
+                } else {
+                    console.error("Datalist for " + collectionName + " not found.");
+                }
+            }
+        }
+
+        // Function to save a new value to localStorage (replaces Firestore save)
+        async function saveToFirestore(collectionName, value) {
+            if (!userId || !value) {
+                console.log("Cannot save to storage: userId or value is null.");
+                return;
+            }
+            try {
+                const key = 'artifacts_' + appId + 'users' + userId + '_' + collectionName;
+                const arr = JSON.parse(localStorage.getItem(key) || '[]');
+                if (!arr.includes(value)) {
+                    arr.push(value);
+                    localStorage.setItem(key, JSON.stringify(arr));
+                }
+                console.log("Saved locally to " + collectionName + ": " + value);
+            } catch (e) {
+                console.error("Error saving document: ", e);
+            }
+        }
+
+        // Function to populate time dropdowns inside the picker
+        function populateTimeDropdowns() {
+            const hourSelects = document.querySelectorAll('[id$="TimeHour"]');
+            const minuteSelects = document.querySelectorAll('[id$="TimeMinute"]');
+            const secondSelects = document.querySelectorAll('[id$="TimeSecond"]');
+
+            // Populate hours (1-12)
+            hourSelects.forEach(select => {
+                for (let i = 1; i <= 12; i++) {
+                    const option = document.createElement('option');
+                    option.value = i.toString().padStart(2, '0');
+                    option.textContent = i.toString().padStart(2, '0');
+                    select.appendChild(option);
+                }
+            });
+
+            // Populate minutes and seconds (0-59)
+            minuteSelects.forEach(select => {
+                for (let i = 0; i < 60; i++) {
+                    const option = document.createElement('option');
+                    option.value = i.toString().padStart(2, '0');
+                    option.textContent = i.toString().padStart(2, '0');
+                    select.appendChild(option);
+                }
+            });
+
+            secondSelects.forEach(select => {
+                for (let i = 0; i < 60; i++) {
+                    const option = document.createElement('option');
+                    option.value = i.toString().padStart(2, '0');
+                    option.textContent = i.toString().padStart(2, '0');
+                    select.appendChild(option);
+                }
+            });
+        }
+
+        // Set default date and time
+        window.addEventListener('load', () => {
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            const seconds = now.getSeconds();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const displayHours = hours % 12 || 12;
+            const formattedTime = ${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} ${ampm};
+
+            document.getElementById('grossDate').value = dateStr;
+            document.getElementById('grossTime').value = formattedTime;
+            document.getElementById('tareDate').value = dateStr;
+            document.getElementById('tareTime').value = formattedTime;
+            
+            // Generate a random 4-digit number for RST No.
+            document.getElementById('rstNo').value = Math.floor(1000 + Math.random() * 9000);
+
+            // Populate the time picker dropdowns
+            populateTimeDropdowns();
+
+            // Fetch and populate datalists from localStorage
+            fetchDropdownData();
+        });
+
+        // Toggle time picker modal
+        document.getElementById('grossTime').addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('grossTimePicker').style.display = 'block';
+            document.getElementById('tareTimePicker').style.display = 'none';
+        });
+
+        document.getElementById('tareTime').addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('tareTimePicker').style.display = 'block';
+            document.getElementById('grossTimePicker').style.display = 'none';
+        });
+
+        // Hide time picker when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.time-picker-container')) {
+                document.getElementById('grossTimePicker').style.display = 'none';
+                document.getElementById('tareTimePicker').style.display = 'none';
+            }
+        });
+
+        // Handle time selection for Gross
+        document.getElementById('grossTimePicker').addEventListener('change', () => {
+            const h = document.getElementById('grossTimeHour').value;
+            const m = document.getElementById('grossTimeMinute').value;
+            const s = document.getElementById('grossTimeSecond').value;
+            const ampm = document.getElementById('grossTimeMeridiem').value;
+            document.getElementById('grossTime').value = ${h}:${m}:${s} ${ampm};
+        });
+
+        // Handle time selection for Tare
+        document.getElementById('tareTimePicker').addEventListener('change', () => {
+            const h = document.getElementById('tareTimeHour').value;
+            const m = document.getElementById('tareTimeMinute').value;
+            const s = document.getElementById('tareTimeSecond').value;
+            const ampm = document.getElementById('tareTimeMeridiem').value;
+            document.getElementById('tareTime').value = ${h}:${m}:${s} ${ampm};
+        });
+
+        document.getElementById('slipForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            // Get form data and convert to uppercase where required
+            const headerLine1 = document.getElementById('headerLine1').value.toUpperCase();
+            const headerLine2 = document.getElementById('headerLine2').value.toUpperCase();
+            const headerLine3 = document.getElementById('headerLine3').value.toUpperCase();
+            const rstNo = document.getElementById('rstNo').value;
+            const vehicleNo = document.getElementById('vehicleNo').value.toUpperCase();
+            const supplier = document.getElementById('supplier').value.toUpperCase();
+            const address = document.getElementById('address').value.toUpperCase();
+            const material = document.getElementById('material').value.toUpperCase();
+            const bags = document.getElementById('bags').value;
+            const gross = parseFloat(document.getElementById('gross').value);
+            const tare = parseFloat(document.getElementById('tare').value);
+            const charges = parseFloat(document.getElementById('charges').value);
+            const grossDate = document.getElementById('grossDate').value;
+            const grossTime = document.getElementById('grossTime').value;
+            const tareDate = document.getElementById('tareDate').value;
+            const tareTime = document.getElementById('tareTime').value;
+            
+            // Check for valid numbers
+            if (isNaN(gross) || isNaN(tare)) {
+                showMessage("Please enter valid numbers for Gross and Tare.");
+                return;
+            }
+
+            // Save form data to localStorage for future use (replaces Firestore saves)
+            await saveToFirestore('suppliers', supplier);
+            await saveToFirestore('addresses', address);
+            await saveToFirestore('materials', material);
+            await saveToFirestore('vehicleNo', vehicleNo);
+
+            const net = gross - tare;
+            const netInWords = numberToDigitsInWords(net);
+
+            // Initialize PDF
+            const doc = new jsPDF();
+            const docWidth = doc.internal.pageSize.getWidth();
+            const margin = 20;
+            const col1X = margin;
+            const col2X = docWidth / 2;
+            let yPos = margin;
+
+            // Header (dynamic layout)
+            doc.setFontSize(14);
+            doc.text(headerLine1, docWidth / 2, yPos, { align: 'center' });
+            yPos += 5;
+            doc.setFontSize(10);
+            doc.text(headerLine2, docWidth / 2, yPos, { align: 'center' });
+            yPos += 5;
+            doc.text(headerLine3, docWidth / 2, yPos, { align: 'center' });
+            
+            yPos += 15;
+
+            // Form data (two columns with fixed spacing)
+            doc.setFontSize(10);
+            const lineSpacing = 8;
+            
+            doc.text('RST NO: ' + rstNo, col1X, yPos);
+            doc.text('VEHICLE NO: ' + vehicleNo, col2X, yPos);
+            yPos += lineSpacing;
+            
+            doc.text('SUPPLIER: ' + supplier, col1X, yPos);
+            doc.text('ADDRESS: ' + address, col2X, yPos);
+            yPos += lineSpacing;
+            
+            doc.text('MATERIAL: ' + material, col1X, yPos);
+            doc.text('NO OF BAGS: ' + bags, col2X, yPos);
+            yPos += lineSpacing;
+
+            doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
+            yPos += lineSpacing;
+
+            doc.text('GROSS : ' + gross, col1X, yPos);
+            doc.text('DATE : ' + grossDate, col2X, yPos);
+            doc.text('Time : ' + grossTime, col2X + 35, yPos);
+            yPos += lineSpacing;
+            
+            doc.text('TARE : ' + tare, col1X, yPos);
+            doc.text('DATE : ' + tareDate, col2X, yPos);
+            doc.text('Time : ' + tareTime, col2X + 35, yPos);
+            yPos += lineSpacing;
+
+            doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
+            yPos += lineSpacing;
+
+            doc.text('NETT : ' + net, col1X, yPos);
+            doc.text(netInWords, col2X, yPos);
+            yPos += lineSpacing;
+            
+            doc.text('Charges (1): Rs ' + charges, col1X, yPos);
+            yPos += lineSpacing;
+            
+            doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
+            yPos += lineSpacing;
+            
+            doc.text("Operator’s Signature:", col1X, yPos);
+            yPos += lineSpacing;
+            
+            doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
+            yPos += lineSpacing;
+
+            // "THANK YOU VISIT AGAIN" is now placed right after the last text
+            doc.text("THANK YOU VISIT AGAIN", docWidth / 2, yPos, { align: 'center' });
+            yPos += lineSpacing;
+            
+
+            // Save the PDF with the dynamic filename
+            doc.save(${vehicleNo}_${grossDate}.pdf);
+
+            showMessage("PDF generated successfully!");
+        });
     </script>
 </body>
 </html>
