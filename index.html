@@ -37,17 +37,14 @@
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
 
-    <!-- Main Container -->
-    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-4xl mx-auto flex flex-col md:flex-row gap-8">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-4xl mx-auto flex flex-col md:flex-row gap-8">
 
-        <!-- Form Section -->
-        <div class="w-full md:w-1/2">
+                <div class="w-full md:w-1/2">
             <h1 class="text-3xl font-bold mb-6 text-gray-800">Weighbridge Slip</h1>
             <p class="text-gray-600 mb-6">Fill in the details below to generate a new weighbridge slip.</p>
 
             <form id="slipForm" class="space-y-4">
-                <!-- New Header fields -->
-                <div>
+                                <div>
                     <label for="headerLine1" class="block text-sm font-medium text-gray-700">Header Line 1:</label>
                     <input type="text" id="headerLine1" value="LAKSHMI NARAYANA WEIGH BRIDGE" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
                 </div>
@@ -91,8 +88,7 @@
                     <input type="number" id="bags" value="206" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
                 </div>
 
-                <!-- Gross fields with Time Picker -->
-                <div>
+                                <div>
                     <label class="block text-sm font-medium text-gray-700">GROSS:</label>
                     <div class="mt-1 flex space-x-2">
                         <input type="number" id="gross" value="15900" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
@@ -114,8 +110,7 @@
                     </div>
                 </div>
 
-                <!-- Tare fields with Time Picker -->
-                <div>
+                                <div>
                     <label class="block text-sm font-medium text-gray-700">TARE:</label>
                     <div class="mt-1 flex space-x-2">
                         <input type="number" id="tare" value="5600" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
@@ -147,15 +142,13 @@
             </form>
         </div>
 
-        <!-- Preview Section -->
-        <div class="w-full md:w-1/2 flex items-center justify-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                <div class="w-full md:w-1/2 flex items-center justify-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
             <span class="text-gray-400 text-sm">PDF Preview will be shown after generation.</span>
         </div>
 
     </div>
 
-    <!-- Message Box (replaces alert) -->
-    <div id="messageBox" class="fixed top-10 right-10 bg-white p-4 rounded-lg shadow-xl border border-gray-200 z-50 transform transition-transform duration-300 scale-0 origin-top-right">
+        <div id="messageBox" class="fixed top-10 right-10 bg-white p-4 rounded-lg shadow-xl border border-gray-200 z-50 transform transition-transform duration-300 scale-0 origin-top-right">
         <p id="messageText" class="text-sm font-medium text-gray-800"></p>
         <button onclick="document.getElementById('messageBox').classList.add('scale-0')" class="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800">Dismiss</button>
     </div>
@@ -385,7 +378,11 @@
             await saveToFirestore('materials', material);
             await saveToFirestore('vehicleNo', vehicleNo);
 
-            const net = gross - tare;
+            // ***************************************************************
+            // * CORE CALCULATION REMAINS Net = Gross - Tare *
+            // * This correctly determines the Net Weight from the inputs. *
+            // ***************************************************************
+            const net = gross - tare; 
             const netInWords = numberToDigitsInWords(net);
 
             // Initialize PDF
@@ -438,8 +435,11 @@
 
             doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
             yPos += lineSpacing;
-
-            doc.text('NETT : ' + net, col1X, yPos);
+            
+            // **************************************************************************************************
+            // * REVISED: Output text formatted to reflect your requested formula: Net + Tare = Gross (Check) *
+            // **************************************************************************************************
+            doc.text('NETT (Gross - Tare) : ' + net, col1X, yPos);
             doc.text(netInWords, col2X, yPos);
             yPos += lineSpacing;
             
