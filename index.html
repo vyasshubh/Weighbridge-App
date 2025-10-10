@@ -89,7 +89,7 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">NETT:</label>
+                    <label class="block text-sm font-medium text-gray-700">NETT (Input):</label>
                     <div class="mt-1 flex space-x-2">
                         <input type="number" id="net" value="10300" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
                         <input type="date" id="netDate" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
@@ -111,7 +111,7 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">TARE:</label>
+                    <label class="block text-sm font-medium text-gray-700">TARE (Input):</label>
                     <div class="mt-1 flex space-x-2">
                         <input type="number" id="tare" value="5600" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
                         <input type="date" id="tareDate" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
@@ -133,7 +133,7 @@
                 </div>
 
                 <div>
-                    <label for="gross" class="block text-sm font-medium text-gray-700">GROSS (Calculated):</label>
+                    <label for="gross" class="block text-sm font-medium text-gray-700">GROSS (Net + Tare, Calculated):</label>
                     <input type="number" id="gross" value="15900" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 bg-gray-200" readonly>
                 </div>
 
@@ -191,7 +191,6 @@
                 return;
             }
 
-            // Map HTML datalist IDs to logical collection names
             const datalistMappings = {
                 'supplierList': 'suppliers',
                 'addressList': 'addresses',
@@ -244,12 +243,10 @@
 
         // Function to populate time dropdowns inside the picker
         function populateTimeDropdowns() {
-            // Updated to use the new IDs 'netTimeHour', 'netTimeMinute', 'netTimeSecond', 'netTimeMeridiem'
             const hourSelects = document.querySelectorAll('[id$="TimeHour"]');
             const minuteSelects = document.querySelectorAll('[id$="TimeMinute"]');
             const secondSelects = document.querySelectorAll('[id$="TimeSecond"]');
 
-            // Populate hours (1-12)
             hourSelects.forEach(select => {
                 for (let i = 1; i <= 12; i++) {
                     const option = document.createElement('option');
@@ -259,7 +256,6 @@
                 }
             });
 
-            // Populate minutes and seconds (0-59)
             minuteSelects.forEach(select => {
                 for (let i = 0; i < 60; i++) {
                     const option = document.createElement('option');
@@ -299,22 +295,15 @@
             const displayHours = hours % 12 || 12;
             const formattedTime = `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} ${ampm}`;
 
-            // Updated to use the new input fields (Net and Tare)
             document.getElementById('netDate').value = dateStr;
             document.getElementById('netTime').value = formattedTime;
             document.getElementById('tareDate').value = dateStr;
             document.getElementById('tareTime').value = formattedTime;
             
-            // Generate a random 4-digit number for RST No.
             document.getElementById('rstNo').value = Math.floor(1000 + Math.random() * 9000);
 
-            // Populate the time picker dropdowns
             populateTimeDropdowns();
-
-            // Fetch and populate datalists from localStorage
             fetchDropdownData();
-
-            // Calculate initial gross value
             updateGross();
 
             // Add event listeners for automatic gross calculation
@@ -365,7 +354,7 @@
         document.getElementById('slipForm').addEventListener('submit', async function(event) {
             event.preventDefault();
 
-            // Get form data and convert to uppercase where required
+            // Get form data
             const headerLine1 = document.getElementById('headerLine1').value.toUpperCase();
             const headerLine2 = document.getElementById('headerLine2').value.toUpperCase();
             const headerLine3 = document.getElementById('headerLine3').value.toUpperCase();
@@ -376,18 +365,27 @@
             const material = document.getElementById('material').value.toUpperCase();
             const bags = document.getElementById('bags').value;
             
+            // Get weights (Gross is calculated, Net and Tare are inputs)
             const net = parseFloat(document.getElementById('net').value);
             const tare = parseFloat(document.getElementById('tare').value);
-            const gross = parseFloat(document.getElementById('gross').value); // Calculated from the input field
+            const gross = parseFloat(document.getElementById('gross').value); 
             
             const charges = parseFloat(document.getElementById('charges').value);
             
-            // Updated to use the new input fields (Net and Tare)
-            const netDate = document.getElementById('netDate').value;
-            const netTime = document.getElementById('netTime').value;
+            // Get dates/times
+            // NOTE: Since the app takes Net Date/Time and Tare Date/Time as input,
+            // we have to decide which one represents the GROSS weighment for the slip.
+            // A common scenario: First weighment is Gross, Second is Tare, so let's use Net's time for Gross 
+            // and Tare's time for Tare to reflect the input fields.
+            const grossDate = document.getElementById('netDate').value; // Using Net's date for Gross in PDF
+            const grossTime = document.getElementById('netTime').value; // Using Net's time for Gross in PDF
             const tareDate = document.getElementById('tareDate').value;
             const tareTime = document.getElementById('tareTime').value;
             
+            // Re-calculate the net in the script before saving to ensure accuracy
+            const calculatedNet = gross - tare;
+            const netInWords = numberToDigitsInWords(calculatedNet);
+
             // Check for valid numbers
             if (isNaN(net) || isNaN(tare)) {
                 showMessage("Please enter valid numbers for Net and Tare.");
@@ -403,12 +401,6 @@
             await saveToFirestore('addresses', address);
             await saveToFirestore('materials', material);
             await saveToFirestore('vehicleNo', vehicleNo);
-
-            // ***************************************************************
-            // * CORE CALCULATION REMAINS Gross = Net + Tare *
-            // * The netInWords now uses the Net value for the 'weight' in words.
-            // ***************************************************************
-            const netInWords = numberToDigitsInWords(net);
 
             // Initialize PDF
             const doc = new jsPDF();
@@ -448,17 +440,17 @@
             doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
             yPos += lineSpacing;
 
-            // Displaying the weights with the new logic
-            // Note: In a typical slip, the weights are often displayed in the order they were measured.
-            // Assuming Net and Tare are measured and Gross is calculated as the final check.
+            // ***************************************************************
+            // * REVISED PDF OUTPUT ORDER: GROSS, TARE, then NETT *
+            // ***************************************************************
             
-            // NET (First measurement)
-            doc.text('NETT : ' + net, col1X, yPos);
-            doc.text('DATE : ' + netDate, col2X, yPos);
-            doc.text('Time : ' + netTime, col2X + 35, yPos);
+            // 1. GROSS (Calculated)
+            doc.text('GROSS : ' + gross, col1X, yPos);
+            doc.text('DATE : ' + grossDate, col2X, yPos);
+            doc.text('Time : ' + grossTime, col2X + 35, yPos);
             yPos += lineSpacing;
 
-            // TARE (Second measurement)
+            // 2. TARE (Input)
             doc.text('TARE : ' + tare, col1X, yPos);
             doc.text('DATE : ' + tareDate, col2X, yPos);
             doc.text('Time : ' + tareTime, col2X + 35, yPos);
@@ -467,9 +459,9 @@
             doc.text("---------------------------------------------------------------------------------------------------------------------", margin, yPos);
             yPos += lineSpacing;
             
-            // GROSS (Calculated final value)
-            doc.text('GROSS (Net + Tare) : ' + gross, col1X, yPos);
-            doc.text('NET IN WORDS: ' + netInWords, col2X, yPos); // Using Net in words as it's the product weight
+            // 3. NETT (Calculated as Gross - Tare)
+            doc.text('NETT (Gross - Tare) : ' + calculatedNet, col1X, yPos);
+            doc.text(netInWords, col2X, yPos); // Net in Words
             yPos += lineSpacing;
             
             doc.text('Charges (1): Rs ' + charges, col1X, yPos);
@@ -489,7 +481,7 @@
             yPos += lineSpacing;
             
             // Save the PDF with the dynamic filename
-            doc.save(`${vehicleNo}_${netDate}.pdf`);
+            doc.save(`${vehicleNo}_${grossDate}.pdf`);
 
             showMessage("PDF generated successfully!");
         });
